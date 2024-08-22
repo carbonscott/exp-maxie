@@ -803,11 +803,15 @@ def is_last_batch(batch_idx, num_batches):
     return batch_idx + 1 == num_batches
 
 
-def get_num_params(model):
-    return sum(p.numel() for p in model.parameters())
+def get_num_params_in_encoder_and_decoder(model):
+    with FSDP.summon_full_params(model, rank0_only=True, writeback=False, offload_to_cpu=True):
+        encoder_params = sum(p.numel() for p in model.vit.encoder.layer.parameters())
+        decoder_params = sum(p.numel() for p in model.decoder.decoder_layers.parameters())
+    return encoder_params, decoder_params
 
+num_params_encoder, num_params_decoder = get_num_params_in_encoder_and_decoder(model)
 
-def estimate_mfu_per_iteration(model, total_num_tokens_per_iteration, t_detla, peak_flops_per_sec):
+def estimate_mfu_per_iteration(num_params_encoder, num_params_decoder, total_num_tokens_per_iteration, t_detla, peak_flops_per_sec):
     """
     Estimate model flops utilization (MFU) in units of peak FLOPS of the GPUs.
 
@@ -825,11 +829,8 @@ def estimate_mfu_per_iteration(model, total_num_tokens_per_iteration, t_detla, p
     fraction of the tokens(patches) as compared with the decoder.
     """
     # Flops per token
-    num_params_in_encoder_layers = get_num_params(model.vit.encoder.layer)
-    num_params_in_decoder_layers = get_num_params(model.decoder.decoder_layers)
-
-    num_flops_encoder_per_token = 6 * num_params_in_encoder_layers
-    num_flops_decoder_per_token = 6 * num_params_in_decoder_layers
+    num_flops_encoder_per_token = 6 * num_params_encoder
+    num_flops_decoder_per_token = 6 * num_params_decoder
 
     # Flops per iteration
     num_flops_per_iteration = num_flops_encoder_per_token * total_num_tokens_per_iteration * (1 - model.config.mask_ratio) + \
@@ -1052,7 +1053,7 @@ try:
                     # Log the training loop loss after a forward/backward/update
                     if dist_rank == 0:
                         # MFU
-                        mfu_per_iteration = estimate_mfu_per_iteration(model, total_num_tokens, t_delta, peak_flops_per_sec)
+                        mfu_per_iteration = estimate_mfu_per_iteration(num_params_encoder, num_params_decoder, total_num_tokens, t_delta, peak_flops_per_sec)
 
                         # Misc
                         current_lrs   = scheduler.get_lr()
