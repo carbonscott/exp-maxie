@@ -1,0 +1,93 @@
+checkpoint:
+  state_dict_type                : full
+  chkpt_saving_iterations        : 1
+  preempt_metadata_path          : null
+  preempt_chkpt_saving_iterations: 1
+  directory                      : experiments/chkpts
+  prefix                         : fsdp
+  path_chkpt_prev                : null
+  pretrain                       : null
+dataset:
+  drop_last_in_sampler: true
+  drop_last_in_loader : true
+  batch_size          : 1
+  num_workers         : 2
+  path_train          : experiments/datasets/dataset.train.json
+  path_eval           : experiments/datasets/dataset.eval.json
+  seg_size            : 4
+  entry_per_cycle     : 1
+  debug               : false
+  server_address      : [localhost, 5000]
+  transforms:
+    H_pad: 1920
+    W_pad: 1920
+    Hv: 256
+    Wv: 256
+    sigma: 0.333
+    num_crop: 8
+    num_patch: 100
+    size_patch: 20
+    angle_max: 360
+    frac_shift_max: 0.1
+    var_size_patch: 0.2
+    sampling_fraction: null
+    set:
+      pad              : false
+      random_patch     : false
+      random_rotate    : false
+      random_shift     : false
+      polar_center_crop: false
+      batch_sampler    : false
+dist:
+  backend               : nccl
+  uses_unique_world_seed: true
+  dtype                 : bfloat16
+logging:
+  directory : experiments/logs
+  prefix    : fsdp
+  level     : debug
+loss:
+  grad_accum_steps: 4
+lr_scheduler:
+  min_lr                     : !!float 1e-7
+  total_iterations           : !!int 1_000_000
+  warmup_iterations          : 5
+  scheduler_update_iterations: 1
+misc:
+  max_epochs          : 5
+  max_eval_iter       : 4
+  max_eval_retry      : 2
+  sharding_stage      : zero3
+  compiles_model      : false
+  data_dump_on        : false
+  peak_flops_per_sec  : !!float 312e12
+  monitors_dynamics   : false
+model:
+  hf_config:
+    hidden_size                 : 768
+    num_hidden_layers           : 12
+    num_attention_heads         : 12
+    intermediate_size           : 3072
+    hidden_act                  : "gelu"
+    hidden_dropout_prob         : 0.0
+    attention_probs_dropout_prob: 0.0
+    initializer_range           : 0.02
+    layer_norm_eps              : 1.0e-12
+    image_size                  : 1920
+    patch_size                  : 16
+    num_channels                : 1
+    qkv_bias                    : true
+    decoder_num_attention_heads : 16
+    decoder_hidden_size         : 512
+    decoder_num_hidden_layers   : 8
+    decoder_intermediate_size   : 2048
+    mask_ratio                  : 0.75
+    norm_pix_loss               : false
+  from_scratch                : false
+optim:
+  grad_clip   : 1.0
+  lr          : !!float 1.5e-4
+  weight_decay: !!float 0.05
+  beta1       : 0.9
+  beta2       : 0.95
+  fused       : false
