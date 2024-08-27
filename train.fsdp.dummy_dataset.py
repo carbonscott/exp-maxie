@@ -811,34 +811,55 @@ def get_num_params_in_encoder_and_decoder(model):
 
 num_params_encoder, num_params_decoder = get_num_params_in_encoder_and_decoder(model)
 
-def estimate_mfu_per_iteration(num_params_encoder, num_params_decoder, total_num_tokens_per_iteration, t_detla, peak_flops_per_sec):
+def estimate_mfu_per_iteration(patch_size, hidden_size_encoder, hidden_size_decoder, num_params_encoder, num_params_decoder, total_num_tokens_per_iteration, t_delta, peak_flops_per_sec):
     """
     Estimate model flops utilization (MFU) in units of peak FLOPS of the GPUs.
 
-    Flops per transformer block per forward pass per token:
-    - num_params    = 12 * token_embd_size**2
-    - num_flops_fwd = 2 * num_params
+    Transformer
+        Flops per transformer block per forward pass per token:
+        - num_params    = 12 * token_embd_size**2
+        - num_flops_fwd = 2 * num_params
 
-    Flops per transformer block per fowrwad and backward pass per token:
-    - num_flops_bwd    = 2 * num_flops_fwd
-    - num_flops_fwdbwd = num_flops_fwd + num_flops_bwd
-                       = 3 * num_flops_fwd
-                       = 6 * num_params
+        Flops per transformer block per fowrwad and backward pass per token:
+        - num_flops_bwd    = 2 * num_flops_fwd
+        - num_flops_fwdbwd = num_flops_fwd + num_flops_bwd
+                           = 3 * num_flops_fwd
+                           = 6 * num_params
 
-    MAE has two transformers: vit encoder and decoder.  The encoder consumes a
-    fraction of the tokens(patches) as compared with the decoder.
+        MAE has two transformers: vit encoder and decoder.  The encoder consumes a
+        fraction of the tokens(patches) as compared with the decoder.
+
+    Embedding
+        Refer to https://www.adamcasson.com/posts/transformer-flops
+        2 * total_num_tokens_per_iteration * patch_size**2 * n_channel * d_model
     """
+    # Forward...
+    # ...Embedding
+    fwd_num_flops_per_iteration_encoder_embedding = 2 * total_num_tokens_per_iteration * patch_size**2 * 1 * hidden_size_encoder
+    fwd_num_flops_per_iteration_decoder_embedding = 2 * total_num_tokens_per_iteration * patch_size**2 * 1 * hidden_size_decoder
+
+    # ...Attention
     # Flops per token
-    num_flops_encoder_per_token = 6 * num_params_encoder
-    num_flops_decoder_per_token = 6 * num_params_decoder
+    fwd_num_flops_transformer_encoder_per_token = 2 * num_params_encoder
+    fwd_num_flops_transformer_decoder_per_token = 2 * num_params_decoder
+    fwd_num_flops_transformer_per_iteration = fwd_num_flops_transformer_encoder_per_token * total_num_tokens_per_iteration * (1 - model.config.mask_ratio) + \
+                                              fwd_num_flops_transformer_decoder_per_token * total_num_tokens_per_iteration
 
-    # Flops per iteration
-    num_flops_per_iteration = num_flops_encoder_per_token * total_num_tokens_per_iteration * (1 - model.config.mask_ratio) + \
-                              num_flops_decoder_per_token * total_num_tokens_per_iteration
+    # ...Fwd total
+    fwd_num_flops_per_iteration = fwd_num_flops_per_iteration_encoder_embedding + \
+                                  fwd_num_flops_per_iteration_decoder_embedding + \
+                                  fwd_num_flops_transformer_per_iteration
 
+    # Backward...
+    bwd_num_flop_per_iteration = 2 * fwd_num_flops_per_iteration
+
+    # Forward+Backward...
+    num_flops_per_iteration = fwd_num_flops_per_iteration + bwd_num_flop_per_iteration
+
+    # MFU...
     # MFU per iteration
-    num_flops_per_iteration_per_sec = num_flops_per_iteration / t_detla
-    mfu = num_flops_per_iteration_per_sec / peak_flops_per_sec
+    num_flops_per_sec = num_flops_per_iteration / t_delta
+    mfu = num_flops_per_sec / peak_flops_per_sec
 
     return mfu
 
