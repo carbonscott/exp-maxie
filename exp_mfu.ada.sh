@@ -1,7 +1,7 @@
 #!/bin/bash
 
 RUNS_NSYS=0
-NUM_MPI_TASKS=4
+NUM_MPI_TASKS=10
 
 JOB=dummy-0.0
 INPUT_H=1440
@@ -12,7 +12,7 @@ Hv=256
 Wv=256
 NUM_CROP=1
 MODEL_IMAGE_SIZE=1440
-BATCH_SIZE=1
+BATCH_SIZE=2
 NUM_WORKERS=2
 USES_PAD=true
 USES_POLAR_CENTER_CROP=false
@@ -21,6 +21,7 @@ USES_RANDOM_PATCH=false
 USES_RANDOM_ROTATE=false
 USES_RANDOM_SHIFT=false
 NUM_HIDDEN_LAYERS_ENCODER=28
+SHARDING_STAGE=zero0
 
 SEG_SIZE=$((BATCH_SIZE * 60))
 TOTAL_SIZE=$((BATCH_SIZE * 1000))
@@ -60,6 +61,7 @@ exp_mfu.optim.fused=false \
 exp_mfu.misc.monitors_dynamics=false \
 exp_mfu.misc.compiles_model=false \
 exp_mfu.misc.max_eval_iter=10 \
+exp_mfu.misc.sharding_stage=$SHARDING_STAGE \
 exp_mfu.lr_scheduler.warmup_iterations=10 \
 exp_mfu.lr_scheduler.total_iterations=1000000 \
 exp_mfu.logging.prefix=$JOB \
