@@ -14,14 +14,15 @@ def main(cfg: DictConfig):
     env             = Environment(loader=FileSystemLoader(cfg.dir_bsub_template))
     template        = env.get_template(cfg.file_bsub_template)
     rendered_script = template.render(
-        qos           = cfg.qos,
-        walltime      = cfg.walltime,
-        job           = cfg.job,
-        bsub_num_cpus = cfg.bsub_num_cpus,
-        num_cpus      = cfg.num_cpus,
-        exp           = cfg.exp,
-        num_runs      = cfg.num_runs + 1,  # range is not right inclusive
-        detector_name = cfg.detector_name,
+        qos            = cfg.qos,
+        walltime       = cfg.walltime,
+        job            = cfg.job,
+        bsub_num_cpus  = cfg.bsub_num_cpus,
+        bsub_num_nodes = cfg.bsub_num_nodes,
+        num_tasks      = cfg.bsub_num_cpus * cfg.bsub_num_nodes,
+        exp            = cfg.exp,
+        num_runs       = cfg.num_runs + 1,  # range is not right inclusive
+        detector_name  = cfg.detector_name,
     )
 
     print("Generated BSUB Script:")

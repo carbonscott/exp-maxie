@@ -5,7 +5,7 @@
 #BSUB -W {{ walltime }}
 #BSUB -P LRN044
 #BSUB -J {{ job }}
-#BSUB -nnodes 1
+#BSUB -nnodes {{ bsub_num_nodes }}
 
 # Fetch all nodes and output a whole string of concatenated host nodes
 # $LSB_MCPU_HOSTS gives something like "batch02 1 a09n03 42 a10n04 42".
@@ -18,6 +18,43 @@ head_node_ip=$(echo "$head_node_ip" | awk '{print $1}')
 
 echo Node IP: $head_node_ip
 export LOGLEVEL=INFO
+
+# Start Ray on the head node
+port=6379
+jsrun --nrs 1 --tasks_per_rs 1 --cpu_per_rs {{ bsub_num_cpus }} -r 1 -g 0 ray start --head --node-ip-address=$head_node_ip --port=$port --num-cpus={{ bsub_num_cpus }} --block --dashboard-host 0.0.0.0 &
+
+# Wait for the head node to initialize
+sleep 30
+
+echo "Starting worker nodes..."
+# Start Ray on worker nodes
+for node in "${nodes[@]:1}"; do
+    echo "Starting worker node on $node"
+    echo "ray start --address=$head_node_ip:$port --num-cpus={{ bsub_num_cpus }} --block"
+    jsrun --nrs 1 --tasks_per_rs 1 --cpu_per_rs {{ bsub_num_cpus }} -r 1 -g 0 \
+        ray start --address=$head_node_ip:$port --num-cpus={{ bsub_num_cpus }} --block --dashboard-host 0.0.0.0 &
+done
+
+sleep 30
+
+# Run the Python script
+echo "Running Python script..."
+jsrun --nrs 1 --tasks_per_rs 1 --cpu_per_rs {{ bsub_num_cpus }} -r 1 -g 0 \
+    python preprocess_psana_runs.ray.py --multirun exp={{ exp }} 'run=range(1,{{ num_runs }})' num_tasks={{ bsub_num_tasks }} detector_name={{ detector_name }}
+
+# Shutdown Ray on all nodes
+echo "Shutting down nodes..."
+for node in "${nodes[@]:1}"; do
+    echo "Shutting down Ray on $node"
+    jsrun --nrs 1 --tasks_per_rs 1 --cpu_per_rs 1 -r 1 -g 0 ray stop &
+done
+
+sleep 30
+
+echo "Job completed"
+
+exit
+
 
 echo "Starting job -- {{ job }}..."
 jsrun \
