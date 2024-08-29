@@ -33,6 +33,8 @@ from maxie.lr_scheduler      import CosineLRScheduler
 from maxie.perf              import Timer
 from maxie.tensor_transforms import (
     NoTransform,
+    PolarCenterCrop,
+    MergeBatchPatchDims,
     Pad,
     DownscaleLocalMean,
     RandomPatch,
@@ -368,6 +370,13 @@ set_seed(world_seed)
 # -- Set up transformation
 merges_batch_patch_dims = uses_polar_center_crop
 pre_transforms = (
+    PolarCenterCrop(
+        Hv       = Hv,
+        Wv       = Wv,
+        sigma    = sigma,
+        num_crop = num_crop,
+    ) if uses_polar_center_crop else NoTransform(),
+    MergeBatchPatchDims() if merges_batch_patch_dims else NoTransform(),
     Pad(H_pad, W_pad) if uses_pad else NoTransform(),
 )
 
@@ -376,14 +385,14 @@ transforms = (
     Pad(H_pad, W_pad),
     ## DownscaleLocalMean(factors = downscale_factors),
     ## Patchify(patch_size, stride),
-    PolarCenterCrop(
-        Hv       = Hv,
-        Wv       = Wv,
-        sigma    = sigma,
-        num_crop = num_crop,
-    ) if uses_polar_center_crop else NoTransform(),
-    MergeBatchPatchDims() if merges_batch_patch_dims else NoTransform(),
-    BatchSampler(sampling_fraction) if uses_batch_sampler else NoTransform(),
+    ## PolarCenterCrop(
+    ##     Hv       = Hv,
+    ##     Wv       = Wv,
+    ##     sigma    = sigma,
+    ##     num_crop = num_crop,
+    ## ) if uses_polar_center_crop else NoTransform(),
+    ## MergeBatchPatchDims() if merges_batch_patch_dims else NoTransform(),
+    ## BatchSampler(sampling_fraction) if uses_batch_sampler else NoTransform(),
     RandomPatch(
         num_patch    = num_patch,
         H_patch      = size_patch,

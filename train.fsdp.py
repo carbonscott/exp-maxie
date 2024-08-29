@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 # -- OLCF specific imports
-from maxie.plugins.slac import init_dist_env_on_s3df
-## from maxie.plugins.olcf import init_dist_env_on_summit
+## from maxie.plugins.slac import init_dist_env_on_s3df
+from maxie.plugins.olcf import init_dist_env_on_summit
 
 # -- Basic imports
 import os
@@ -35,6 +35,8 @@ from maxie.lr_scheduler      import CosineLRScheduler
 from maxie.perf              import Timer
 from maxie.tensor_transforms import (
     NoTransform,
+    PolarCenterCrop,
+    MergeBatchPatchDims,
     Pad,
     DownscaleLocalMean,
     RandomPatch,
@@ -254,8 +256,8 @@ signal.signal(signal.SIGTERM, signal_handler)
 # torchrun doesn't work well on OLCF.  Refer to https://docs.olcf.ornl.gov/software/python/pytorch_frontier.html#torchrun
 # Thanks to the suggestion by @frobnitzem
 torchrun_exists = int(os.environ.get("RANK", -1)) != -1
-## if not torchrun_exists: init_dist_env_on_summit()
-if not torchrun_exists: init_dist_env_on_s3df()
+if not torchrun_exists: init_dist_env_on_summit()
+## if not torchrun_exists: init_dist_env_on_s3df()
 
 # --- Initialize distributed environment
 uses_dist = int(os.environ.get("WORLD_SIZE", 1)) > 1
