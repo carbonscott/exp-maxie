@@ -1,0 +1,12 @@
+dir_sbatch_template : 'sbatch_config'
+file_sbatch_template: 'template.sbatch'
+dir_sbatch_jobs     : 'sbatch_jobs'
+file_sbatch_job     : 'base.sbatch'
+qos                 : "batch"
+walltime            : "02:00"
+job                 : "job_name"
+sbatch_num_nodes    : 4
+sbatch_num_cpus     : 80
+exp                 : 'exp_name'
+num_runs            : 71
+detector_name       : 'Rayonix'

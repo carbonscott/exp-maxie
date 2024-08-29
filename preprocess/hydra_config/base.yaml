@@ -1,0 +1,11 @@
+exp           : 'mfxl1027522'
+run           : 0
+access_mode   : 'idx'
+detector_name : 'epix10k2M'
+num_tasks     : 10
+max_num_events: null
+postfix       : null
+
+hydra:
+  run:
+    dir: 'outputs/${exp}_${run}'
