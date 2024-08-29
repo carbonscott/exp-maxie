@@ -12,6 +12,8 @@ dataset:
   drop_last_in_loader : true
   batch_size          : 1
   num_workers         : 2
+  pin_memory          : true
+  prefetch_factor     : 20
   path_train          : experiments/datasets/dataset.train.json
   path_eval           : experiments/datasets/dataset.eval.json
   seg_size            : 4
@@ -36,6 +38,7 @@ dataset:
       random_patch     : false
       random_rotate    : false
       random_shift     : false
+      instance_norm    : false
       polar_center_crop: false
       batch_sampler    : false
 dist:
