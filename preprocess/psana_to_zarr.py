@@ -51,7 +51,7 @@ def process_run(exp, run, detector, partition_size, output_dir):
             logger.warning(f"Received None data for event {idx}")
             continue
 
-        logger.info(f"Processing event {idx}")
+        logger.debug(f"Processing event {idx}")
 
         images.append(data)
 
