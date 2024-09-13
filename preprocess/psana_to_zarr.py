@@ -60,7 +60,7 @@ def process_run(exp, run, detector, partition_size, output_dir):
             zarr_array = store.create_dataset(
                 "data",
                 data=np.array(images),
-                chunks=(min(64, partition_size), *data.shape),  # Adjust chunk size based on partition_size
+                chunks=(min(partition_size, partition_size), *data.shape),  # Adjust chunk size based on partition_size
                 compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)
             )
             logger.info(f"Saved partition {partition} with {len(images)} images")
@@ -75,7 +75,7 @@ def process_run(exp, run, detector, partition_size, output_dir):
         zarr_array = store.create_dataset(
             "data",
             data=np.array(images),
-            chunks=(min(64, len(images)), *data.shape),
+            chunks=(min(partition_size, len(images)), *data.shape),
             compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)
         )
         logger.info(f"Saved final partition {partition} with {len(images)} images")
