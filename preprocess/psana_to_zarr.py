@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 import zarr
 import os
+import json
 import logging
 from mpi4py import MPI
 from psana_wrapper import PsanaWrapperSmd, ImageRetrievalMode
@@ -22,24 +23,34 @@ def setup_logging(rank, log_level=logging.INFO):
     return logging.getLogger(__name__)
 
 def create_zarr_store(output_dir, exp, run, rank, partition):
-    filename = f"{exp}.{run:06d}.rank{rank:d}.part{partition:d}.zarr"
-    filepath = os.path.join(output_dir, filename)
+    filepath = os.path.join(output_dir, exp, f"r{run:d}", f"r{rank:d}.p{partition:d}.zarr")
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     return zarr.open(filepath, mode='w')
 
-def create_zarr_dataset(store, data, chunk_size):
+def create_zarr_dataset(store, data):
     return store.create_dataset(
         "data",
         data=np.array(data),
-        chunks=(min(chunk_size, len(data)), *data[0].shape),
+        chunks=(1, *data[0].shape),
         compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)
     )
 
-def process_run(exp, run, detector, partition_size, output_dir):
+def create_checkpoint(output_dir, exp, completed_runs):
+    checkpoint_file = os.path.join(output_dir, f"{exp}_checkpoint.json")
+    with open(checkpoint_file, 'w') as f:
+        json.dump({"completed_runs": completed_runs}, f)
+
+def read_checkpoint(output_dir, exp):
+    checkpoint_file = os.path.join(output_dir, f"{exp}_checkpoint.json")
+    if os.path.exists(checkpoint_file):
+        with open(checkpoint_file, 'r') as f:
+            return json.load(f)["completed_runs"]
+    return []
+
+def process_run(exp, run, detector, partition_size, output_dir, logger):
     mpi_comm = MPI.COMM_WORLD
     mpi_rank = mpi_comm.Get_rank()
     mpi_size = mpi_comm.Get_size()
-
-    logger = setup_logging(mpi_rank)
 
     logger.info(f"Starting processing for exp={exp}, run={run}, detector={detector}")
 
@@ -48,7 +59,7 @@ def process_run(exp, run, detector, partition_size, output_dir):
         logger.info(f"Successfully initialized PsanaWrapperSmd(exp={exp}, run={run}, detector={detector})")
     except Exception as e:
         logger.error(f"Error initializing PsanaWrapperSmd for exp={exp}, run={run}: {e}")
-        return
+        return False
 
     images = []
     partition = 0
@@ -67,7 +78,7 @@ def process_run(exp, run, detector, partition_size, output_dir):
             if store is None:
                 store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
 
-            create_zarr_dataset(store, images, chunk_size)
+            create_zarr_dataset(store, images)
             logger.info(f"Saved partition {partition} with {len(images)} images")
 
             # Reset for next partition
@@ -80,8 +91,10 @@ def process_run(exp, run, detector, partition_size, output_dir):
         if store is None:
             store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
 
-        create_zarr_dataset(store, images, chunk_size)
+        create_zarr_dataset(store, images)
         logger.info(f"Saved final partition {partition} with {len(images)} images")
+
+    return True
 
 def main():
     parser = argparse.ArgumentParser(description="Process Psana data and save as Zarr files")
@@ -96,17 +109,41 @@ def main():
     # Ensure output directory exists
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # Setup MPI
+    mpi_comm = MPI.COMM_WORLD
+    mpi_rank = mpi_comm.Get_rank()
+    mpi_size = mpi_comm.Get_size()
+
     # Setup logging
-    mpi_rank = MPI.COMM_WORLD.Get_rank()
     logger = setup_logging(mpi_rank, getattr(logging, args.log_level))
 
-    # Only rank 0 should log this message
+    # Only rank 0 should log this message and handle checkpointing
     if mpi_rank == 0:
         logger.info(f"Output directory: {os.path.abspath(args.output_dir)}")
         logger.info(f"Processing runs: {args.run}")
 
-    for run in args.run:
-        process_run(args.exp, run, args.detector, args.partition_size, args.output_dir)
+        completed_runs = read_checkpoint(args.output_dir, args.exp)
+        runs_to_process = [run for run in args.run if run not in completed_runs]
+        logger.info(f"Runs to process: {runs_to_process}")
+    else:
+        runs_to_process = None
+
+    # Broadcast runs_to_process to all ranks
+    runs_to_process = mpi_comm.bcast(runs_to_process, root=0)
+
+    for run in runs_to_process:
+        run_success = process_run(args.exp, run, args.detector, args.partition_size, args.output_dir, logger)
+
+        # Synchronize all ranks after processing the run
+        mpi_comm.Barrier()
+
+        # Only rank 0 updates the checkpoint
+        if mpi_rank == 0 and run_success:
+            completed_runs.append(run)
+            create_checkpoint(args.output_dir, args.exp, completed_runs)
+            logger.info(f"Completed run {run} and updated checkpoint.")
+
+    logger.info("All runs processed successfully.")
 
 if __name__ == "__main__":
     main()
