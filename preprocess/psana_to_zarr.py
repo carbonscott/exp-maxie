@@ -22,9 +22,17 @@ def setup_logging(rank, log_level=logging.INFO):
     return logging.getLogger(__name__)
 
 def create_zarr_store(output_dir, exp, run, rank, partition):
-    filename = f"{exp}.{run:06d}.rank{rank:06d}.part{partition:06d}.zarr"
+    filename = f"{exp}.{run:06d}.rank{rank:d}.part{partition:d}.zarr"
     filepath = os.path.join(output_dir, filename)
     return zarr.open(filepath, mode='w')
+
+def create_zarr_dataset(store, data, chunk_size):
+    return store.create_dataset(
+        "data",
+        data=np.array(data),
+        chunks=(min(chunk_size, len(data)), *data[0].shape),
+        compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+    )
 
 def process_run(exp, run, detector, partition_size, output_dir):
     mpi_comm = MPI.COMM_WORLD
@@ -44,7 +52,7 @@ def process_run(exp, run, detector, partition_size, output_dir):
 
     images = []
     partition = 0
-    store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
+    store = None
 
     for idx, data in enumerate(smd_wrapper.iter_events(ImageRetrievalMode.image)):
         if data is None:
@@ -56,28 +64,23 @@ def process_run(exp, run, detector, partition_size, output_dir):
         images.append(data)
 
         if len(images) == partition_size:
-            # Create a new zarr array and store the images
-            zarr_array = store.create_dataset(
-                "data",
-                data=np.array(images),
-                chunks=(min(partition_size, partition_size), *data.shape),  # Adjust chunk size based on partition_size
-                compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)
-            )
+            if store is None:
+                store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
+
+            create_zarr_dataset(store, images, chunk_size)
             logger.info(f"Saved partition {partition} with {len(images)} images")
 
             # Reset for next partition
             images = []
             partition += 1
-            store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
+            store = None
 
     # Save any remaining images
     if images:
-        zarr_array = store.create_dataset(
-            "data",
-            data=np.array(images),
-            chunks=(min(partition_size, len(images)), *data.shape),
-            compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)
-        )
+        if store is None:
+            store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
+
+        create_zarr_dataset(store, images, chunk_size)
         logger.info(f"Saved final partition {partition} with {len(images)} images")
 
 def main():
