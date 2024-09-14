@@ -27,11 +27,12 @@ def create_zarr_store(output_dir, exp, run, rank, partition):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     return zarr.open(filepath, mode='w')
 
-def create_zarr_dataset(store, data):
+def create_zarr_dataset(store, num_images, image_shape):
     return store.create_dataset(
         "data",
-        data=np.array(data),
-        chunks=(1, *data[0].shape),
+        shape=(num_images, *image_shape),
+        chunks=(1, *image_shape),
+        dtype=np.float32,
         compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)
     )
 
@@ -78,7 +79,10 @@ def process_run(exp, run, detector, partition_size, output_dir, logger):
             if store is None:
                 store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
 
-            create_zarr_dataset(store, images)
+            dataset = create_zarr_dataset(store, len(images), images[0].shape)
+            for i, img in enumerate(images):  # Optimize memory usage
+                dataset[i] = img
+
             logger.info(f"Saved partition {partition} with {len(images)} images")
 
             # Reset for next partition
@@ -91,7 +95,10 @@ def process_run(exp, run, detector, partition_size, output_dir, logger):
         if store is None:
             store = create_zarr_store(output_dir, exp, run, mpi_rank, partition)
 
-        create_zarr_dataset(store, images)
+        dataset = create_zarr_dataset(store, len(images), images[0].shape)
+        for i, img in enumerate(images):  # Optimize memory usage
+            dataset[i] = img
+
         logger.info(f"Saved final partition {partition} with {len(images)} images")
 
     return True
