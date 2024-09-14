@@ -1,8 +1,12 @@
 """
-On summit,
+4 nodes, 42 MPI tasks, 42 cores
 
-# 4 nodes, 42 MPI tasks, 42 cores
-OMP_NUM_THREADS=1 jsrun -n4 -a42 -c42 -g0 python psana_to_zarr.py mfxl1027522 epix10k2M --run 351 349 348
+On summit:
+
+    OMP_NUM_THREADS=1 jsrun -n4 -a42 -c42 -g0 python psana_to_zarr.py mfxl1027522 epix10k2M --run 351 349 348
+
+On s3df:
+    OMP_NUM_THREADS=1 srun -N 4 -n 168 python psana_to_hdf5.py mfxl1027522 epix10k2M --run 351 349 348
 """
 
 import argparse
