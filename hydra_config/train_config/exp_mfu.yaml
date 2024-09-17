@@ -10,22 +10,29 @@ checkpoint:
 dataset:
   drop_last_in_sampler: true
   drop_last_in_loader : true
-  batch_size          : 1
+  batch_size          : 2
   num_workers         : 2
   pin_memory          : true
   prefetch_factor     : 20
-  path_train          : experiments/datasets/dataset.train.json
-  path_val            : experiments/datasets/dataset.val.json
   seg_size            : 200
+  path_train          : experiments/datasets/safetensor_dataset.train.csv
+  path_eval           : experiments/datasets/safetensor_dataset.validate.csv
+  debug               : false
+  cache_size          : 10
+  input:
+    C: 1
+    H: 1920
+    W: 1920
+    total_size: 1000000
   transforms:
-    H_pad: 1120
-    W_pad: 1120
-    Hv: 1120
-    Wv: 1120
-    sigma: 0.01
-    num_crop: 1
-    num_patch: 100
-    size_patch: 20
+    H_pad: 1920
+    W_pad: 1920
+    Hv: 256
+    Wv: 256
+    sigma: 0.333
+    num_crop: 8
+    num_patch: 20
+    size_patch: 10
     angle_max: 360
     frac_shift_max: 0.1
     var_size_patch: 0.2
@@ -41,13 +48,13 @@ dataset:
 dist:
   backend               : nccl
   uses_unique_world_seed: true
-  dtype                 : float16
+  dtype                 : bfloat16
 logging:
   directory : experiments/logs
   prefix    : fsdp
   level     : debug
 loss:
-  grad_accum_steps: 10
+  grad_accum_steps: 4
 lr_scheduler:
   min_lr                     : !!float 1e-7
   total_iterations           : !!int 1_000_000
@@ -55,13 +62,13 @@ lr_scheduler:
   scheduler_update_iterations: 1
 misc:
   max_epochs          : 5
-  max_eval_iter       : 10
+  max_eval_iter       : 4
   max_eval_retry      : 2
   sharding_stage      : zero3
   compiles_model      : false
   data_dump_on        : false
-  peak_flops_per_sec  : !!float 112e12
-  monitors_dynamics   : false
+  peak_flops_per_sec  : !!float 312e12
+  monitors_dynamics   : true
 model:
   hf_config:
     hidden_size                 : 768
@@ -73,8 +80,8 @@ model:
     attention_probs_dropout_prob: 0.0
     initializer_range           : 0.02
     layer_norm_eps              : 1.0e-12
-    image_size                  : 1120
-    patch_size                  : 14
+    image_size                  : 1920
+    patch_size                  : 16
     num_channels                : 1
     qkv_bias                    : true
     decoder_num_attention_heads : 16

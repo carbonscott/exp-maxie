@@ -21,23 +21,19 @@ from contextlib import nullcontext
 from datetime   import timedelta
 
 # -- maxie specific imports
-from maxie.datasets.ipc_segmented_dataset_dist import (
-    IPCDistributedSegmentedDatasetConfig,
-    IPCDistributedSegmentedDataset,
-    IPCDatasetConfig,
-    IPCDataset,
-)
-from maxie.utils.seed        import set_seed
-from maxie.utils.misc        import is_action_due
-from maxie.utils.checkpoint  import CheckpointConfig, Checkpoint
-from maxie.utils.flops       import estimate_conv_flops, estimate_transformer_flops
-from maxie.lr_scheduler      import CosineLRScheduler
-from maxie.perf              import Timer
-from maxie.tensor_transforms import (
+from maxie.datasets.zarr_dataset import DistributedZarrDataset
+from maxie.utils.seed            import set_seed
+from maxie.utils.misc            import is_action_due
+from maxie.utils.checkpoint      import CheckpointConfig, Checkpoint
+from maxie.utils.flops           import estimate_conv_flops, estimate_transformer_flops
+from maxie.lr_scheduler          import CosineLRScheduler
+from maxie.perf                  import Timer
+from maxie.tensor_transforms     import (
     NoTransform,
     PolarCenterCrop,
     MergeBatchPatchDims,
     Pad,
+    InstanceNorm,
     DownscaleLocalMean,
     RandomPatch,
     RandomRotate,
@@ -148,8 +144,8 @@ state_dict_type                 = chkpt_config.get("state_dict_type")
 
 # -- Dataset
 dataset_config         = config.get("dataset")
-path_train_json        = dataset_config.get("path_train")
-path_eval_json         = dataset_config.get("path_eval")
+path_train             = dataset_config.get("path_train")
+path_val               = dataset_config.get("path_val")
 drop_last_in_sampler   = dataset_config.get("drop_last_in_sampler")
 drop_last_in_loader    = dataset_config.get("drop_last_in_loader")
 batch_size             = dataset_config.get("batch_size")
@@ -157,9 +153,6 @@ num_workers            = dataset_config.get("num_workers")
 seg_size               = dataset_config.get("seg_size")
 pin_memory             = dataset_config.get("pin_memory")
 prefetch_factor        = dataset_config.get("prefetch_factor")
-entry_per_cycle        = dataset_config.get("entry_per_cycle")
-debug_dataloading      = dataset_config.get("debug")
-server_address         = dataset_config.get("server_address")
 transforms_config      = dataset_config.get("transforms")
 num_patch              = transforms_config.get("num_patch")
 size_patch             = transforms_config.get("size_patch")
@@ -179,6 +172,7 @@ sigma                  = transforms_config.get("sigma")
 num_crop               = transforms_config.get("num_crop")
 set_transforms         = transforms_config.get("set")
 uses_pad               = set_transforms.get("pad")
+uses_instance_norm     = set_transforms.get("uses_instance_norm")
 uses_random_patch      = set_transforms.get("random_patch")
 uses_random_rotate     = set_transforms.get("random_rotate")
 uses_random_shift      = set_transforms.get("random_shift")
@@ -373,13 +367,6 @@ set_seed(world_seed)
 merges_batch_patch_dims = uses_polar_center_crop
 pre_transforms = (
     Pad(H_pad, W_pad) if uses_pad else NoTransform(),
-)
-
-transforms = (
-    ## Norm(detector_norm_params),
-    Pad(H_pad, W_pad),
-    ## DownscaleLocalMean(factors = downscale_factors),
-    ## Patchify(patch_size, stride),
     PolarCenterCrop(
         Hv       = Hv,
         Wv       = Wv,
@@ -387,15 +374,10 @@ transforms = (
         num_crop = num_crop,
     ) if uses_polar_center_crop else NoTransform(),
     MergeBatchPatchDims() if merges_batch_patch_dims else NoTransform(),
-    BatchSampler(sampling_fraction) if uses_batch_sampler else NoTransform(),
-    RandomPatch(
-        num_patch    = num_patch,
-        H_patch      = size_patch,
-        W_patch      = size_patch,
-        var_H_patch  = var_size_patch,
-        var_W_patch  = var_size_patch,
-        returns_mask = False,
-    ) if uses_random_patch  else NoTransform(),
+)
+
+transforms = (
+    InstanceNorm() if uses_instance_norm else NoTransform(),
     RandomRotate(angle_max) if uses_random_rotate else NoTransform(),
     RandomShift(
         frac_y_shift_max = frac_shift_max,
@@ -404,42 +386,31 @@ transforms = (
 )
 
 # -- Set up training set
-ipc_dataset_train_config = IPCDistributedSegmentedDatasetConfig(
-    path_json             = path_train_json,
-    seg_size              = seg_size,
-    world_size            = dist_world_size,
-    transforms            = pre_transforms,
-    is_perf               = True,
-    server_address        = tuple(server_address),
-    loads_segment_in_init = False,
-    entry_per_cycle       = entry_per_cycle,
-    debug                 = debug_dataloading,
+dataset_train = DistributedZarrDataset(
+    path_train,
+    seg_size   = seg_size,
+    transforms = pre_transforms,
+    seed       = base_seed
 )
-dataset_train = IPCDistributedSegmentedDataset(ipc_dataset_train_config)
 
 # -- Set up eval set
 # --- For training loss
-dataset_eval_train = IPCDistributedSegmentedDataset(ipc_dataset_train_config)
+dataset_eval_train = DistributedZarrDataset(
+    path_train,
+    seg_size   = seg_size,
+    transforms = pre_transforms,
+    seed       = base_seed
+)
 
 # --- For val loss
-ipc_dataset_eval_config = IPCDistributedSegmentedDatasetConfig(
-    path_json             = path_eval_json,
-    seg_size              = seg_size,
-    world_size            = dist_world_size,
-    transforms            = pre_transforms,
-    is_perf               = True,
-    server_address        = tuple(server_address),
-    loads_segment_in_init = False,
-    entry_per_cycle       = entry_per_cycle,
-    debug                 = debug_dataloading,
+dataset_eval_val = DistributedZarrDataset(
+    path_val,
+    seg_size   = seg_size,
+    transforms = pre_transforms,
+    seed       = base_seed
 )
-dataset_eval_val = IPCDistributedSegmentedDataset(ipc_dataset_eval_config)
 
-# -- Custom collate to merge patch and batch dimension using concatenation
-## custom_collate = lambda batch: torch.cat(batch, dim = 0)  # batch of [N, C, H, W] -> [B * N, C, H, W]
-def custom_collate(batch):
-    batch_filtered = [x for x in batch if x is not None]
-    return torch.cat(batch_filtered, dim = 0) if len(batch_filtered) else None
+custom_collate = None
 
 # ----------------------------------------------------------------------- #
 #  CHECKPOINT PRE FSDP
@@ -875,38 +846,6 @@ try:
             # Shuffle the training example
             if uses_dist:
                 sampler.set_epoch(epoch)
-
-            # [WORKAROUND]
-            ## # FIXME: Better data cleaning will eliminate None batch
-            ## if batch_input_shape is None:
-            ##     dist.barrier()
-            ##     object_list = [None, ]
-            ##     if dist_rank == 0:
-            ##         dataset_eval_train.reset()
-            ##         dataset_eval_train.set_start_idx(0)
-            ##         dataloader_eval = torch.utils.data.DataLoader(
-            ##             dataset_eval_train,
-            ##             batch_size  = batch_size,
-            ##             sampler     = None,
-            ##             num_workers = num_workers,
-            ##             shuffle     = False,
-            ##             collate_fn  = custom_collate,
-            ##         )
-            ##         dataloader_eval_iter = iter(dataloader_eval)
-            ##         logger.debug(f"[RANK {dist_rank}] Identifying the shape of batch_data...")
-            ##         while batch_input_shape is None:
-            ##             try:
-            ##                 batch_data = next(dataloader_eval_iter)
-            ##                 if batch_data is not None:
-            ##                     batch_input_shape = batch_data.shape
-            ##                     logger.debug(f"[RANK {dist_rank}] Shape of batch_data = {batch_input_shape}")
-            ##             except StopIteration:
-            ##                 raise ValueError(f"[RANK {dist_rank}] No valid eval data found for obtaining the input shape!!!")
-            ##                 break
-            ##         object_list = [batch_input_shape, ]
-            ##     if uses_dist:
-            ##         dist.broadcast_object_list(object_list, src = 0)
-            ##         batch_input_shape = object_list[0]
 
             # -- Loop over mini batches
             # --- Set up helper variables for gradient accum and reporting
