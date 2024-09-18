@@ -1,8 +1,7 @@
 checkpoint:
   state_dict_type                : full
-  chkpt_saving_iterations        : 1
-  preempt_metadata_path          : null
-  preempt_chkpt_saving_iterations: 1
+  chkpt_saving_iterations        : 60
+  preempt_chkpt_saving_iterations: 60
   directory                      : experiments/chkpts
   prefix                         : fsdp
   path_chkpt_prev                : null
@@ -87,7 +86,7 @@ model:
 optim:
   grad_clip   : 1.0
   lr          : !!float 1.5e-4
-  weight_decay: !!float 0.05
+  weight_decay: !!float 0.001
   beta1       : 0.9
   beta2       : 0.95
   fused       : false
