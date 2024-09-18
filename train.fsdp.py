@@ -504,7 +504,7 @@ mixed_precision = MixedPrecision(
 
 # --- Autocast
 device_type = 'cuda' if 'cuda' in device else 'cpu'
-autocast_context = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type = device_type, dtype = mixed_precision_dtype)
+autocast_context = nullcontext() if device_type == 'cpu' or dist_dtype == 'float32' else torch.amp.autocast(device_type = device_type, dtype = mixed_precision_dtype)
 
 # --- GradScaler
 # If enabled = False scaler is a no-op
