@@ -1,6 +1,7 @@
 checkpoint:
   state_dict_type                : full
   chkpt_saving_iterations        : 60
+  preempt_metadata_path          : null
   preempt_chkpt_saving_iterations: 60
   directory                      : experiments/chkpts
   prefix                         : fsdp
