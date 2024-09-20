@@ -124,12 +124,16 @@ schema = pa.schema([
     ('shape', pa.string())
 ])
 
+zarr_absolute_path = os.path.abspath(f'{args.output_name}.zarr')
 writer = pq.ParquetWriter(output_file, schema)
 df = pd.DataFrame({
-    'absolute_path': [f'{args.output_name}.zarr'],
+    'absolute_path': [zarr_absolute_path],
     'shape': [f'{image_shape}'],
 })
 
 table_chunk = pa.Table.from_pandas(df[['absolute_path', 'shape']], schema=schema)
 writer.write_table(table_chunk)
 writer.close()
+
+print(f"Zarr file created at: {zarr_absolute_path}")
+print(f"Parquet file created at: {os.path.abspath(output_file)}")
