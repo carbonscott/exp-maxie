@@ -7,6 +7,8 @@ checkpoint:
   prefix                         : fsdp
   path_chkpt_prev                : null
   pretrain                       : null
+  offload_to_cpu                 : false
+  rank0_only                     : true
 dataset:
   drop_last_in_sampler: true
   drop_last_in_loader : true
