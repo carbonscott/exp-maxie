@@ -4,7 +4,7 @@
 # -- OLCF specific imports
 ## from maxie.plugins.slac import init_dist_env_on_s3df
 ## from maxie.plugins.olcf import init_dist_env_on_summit
-from peaknet.plugins.nersc import init_dist_env_on_nersc
+from maxie.plugins.nersc import init_dist_env_on_nersc
 
 # -- Basic imports
 import os
