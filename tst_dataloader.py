@@ -133,7 +133,7 @@ class GlobalCheckpointLazyZarrIterableDataset(IterableDataset):
 
         # ------------------------------
         # Determine where to start in this partition.
-        # We find the first file whose global index is >= checkpoint's file index.
+        # Find the first file whose global index is >= checkpoint's file index.
         start_partition_idx = 0
         for idx, (global_idx, file_path) in enumerate(global_partition):
             if global_idx >= checkpoint_global_index:
