@@ -131,11 +131,6 @@ class GlobalCheckpointLazyZarrIterableDataset(IterableDataset):
         # Further partition among DataLoader workers (if any)
         global_partition = global_partition[worker_id::num_workers]
 
-        # --- Reporting the partition (only from worker 0) ---
-        print(f"[Rank {self.rank} Worker {worker_id}] Global partition has {len(global_partition)} files:")
-        for idx, (global_idx, file_path) in enumerate(global_partition):
-            print(f"  [RANK {rank}]Partition index {idx}: Global file index {global_idx}, File {file_path}")
-
         # ------------------------------
         # Determine where to start in this partition.
         # We find the first file whose global index is >= checkpoint's file index.
@@ -147,9 +142,6 @@ class GlobalCheckpointLazyZarrIterableDataset(IterableDataset):
         else:
             # If no file in this partition is beyond the checkpoint, nothing to iterate.
             return iter([])
-
-        print(f"[Rank {self.rank} Worker {worker_id}] Will start from partition index {start_partition_idx} " 
-              f"(Global file index {global_partition[start_partition_idx][0]})")
 
         self._state = {"file": None, "image_index": 0}
 
@@ -230,10 +222,6 @@ def simulate_dataset(world_size, checkpoint_state=None, num_workers=0):
     else:
         images_yielded = list(dataset)
     results[rank] = images_yielded
-    print(f"[Rank {rank}] Processed {len(images_yielded)} images.")
-    if images_yielded:
-        print(f"  First 3 images: {images_yielded[:3]}")
-        print(f"  Last 3 images: {images_yielded[-3:]}")
     return results
 
 # ================================================================
@@ -258,28 +246,21 @@ if __name__ == "__main__":
         world_size = 1
         print(f"NO distributed environment is required.  RANK:{rank},LOCAL_RANK:{local_rank},WORLD_SIZE:{world_size}")
 
-    # ----- Simulation 1: Without a Checkpoint, single-worker -----
-    results_no_checkpoint = simulate_dataset(world_size, checkpoint_state=None, num_workers=2)
+    ## # ----- Simulation 1: Without a Checkpoint, single-worker -----
+    ## results_no_checkpoint = simulate_dataset(world_size, checkpoint_state=None, num_workers=0)
 
-    ## # ----- Simulation 2: With a Checkpoint, single-worker -----
-    ## # For example, suppose in a previous run we processed up to file "data/file42.zarr"
-    ## # at image index 5.
-    ## checkpoint_state = {"file": "data/file42.zarr", "image_index": 5}
-    ## results_with_checkpoint = simulate_dataset(world_size, checkpoint_state=checkpoint_state, num_workers=0)
+    dist.barrier(device_ids=[local_rank])
+
+    # ----- Simulation 2: With a Checkpoint, single-worker -----
+    # For example, suppose in a previous run we processed up to file "data/file42.zarr"
+    # at image index 5.
+    checkpoint_state = {"file": "data/file9.zarr", "image_index": 5}
+    results_with_checkpoint = simulate_dataset(world_size, checkpoint_state=checkpoint_state, num_workers=0)
 
     ## # ----- Simulation 3: Without a Checkpoint, multi-worker (2 workers per rank) -----
     ## results_no_checkpoint_multi = simulate_dataset(world_size, checkpoint_state=None, num_workers=2)
 
     ## # ----- Simulation 4: With a Checkpoint, multi-worker (2 workers per rank) -----
     ## results_with_checkpoint_multi = simulate_dataset(world_size, checkpoint_state=checkpoint_state, num_workers=2)
-
-    ## # ----- Simulation 1: Without a Checkpoint -----
-    ## results_no_checkpoint = simulate_dataset(world_size, checkpoint_state=None)
-
-    ## # ----- Simulation 2: With a Checkpoint -----
-    ## # For example, suppose in a previous run we processed up to file "data/file42.zarr"
-    ## # at image index 5.
-    ## checkpoint_state = {"file": "data/file42.zarr", "image_index": 5}
-    ## results_with_checkpoint = simulate_dataset(world_size, checkpoint_state=checkpoint_state)
 
     dist.destroy_process_group()
