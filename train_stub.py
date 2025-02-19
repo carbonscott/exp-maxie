@@ -237,7 +237,7 @@ if dist_rank == 0:
 
 # Model resumption
 if from_resume:
-    checkpointer.pre_fsdp_load(dist_rank, model, config.checkpoint.path_chkpt_prev)
+    checkpointer.pre_dp_load(dist_rank, model, config.checkpoint.path_chkpt_prev)
 
 # Compile the model
 if config.misc.compiles_model:
@@ -317,7 +317,7 @@ last_epoch = 0
 last_seg   = -1
 if from_resume:
     # Optimizer, scheduler are loaded
-    checkpointer.post_fsdp_load(dist_rank, model, optimizer, scheduler, iter_state, config.checkpoint.path_chkpt_prev)
+    checkpointer.post_dp_load(dist_rank, model, optimizer, scheduler, iter_state, config.checkpoint.path_chkpt_prev)
 
     # Training state
     last_epoch = iter_state.get("epoch")
