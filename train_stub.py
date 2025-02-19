@@ -38,6 +38,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.distributed as dist
 
+# Distribtued Data Parallel (DDP)
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 # Fully Sharded Data Parallel (FSDP)
 from torch.distributed.fsdp import (
     FullyShardedDataParallel as FSDP,
@@ -141,8 +144,10 @@ if version.parse(torch_version) <= version.parse("2.0.1"):
 # FSDP SETUP
 # ==========
 sharding_strategy = set_sharding_strategy(config.dist.sharding_stage)
-auto_wrap_policy = shard_layers({ViTMAELayer})
-backward_prefetch = backward_prefetch()
+uses_fsdp = uses_dist and sharding_strategy != ShardingStrategy.NO_SHARD
+if uses_fsdp:
+    auto_wrap_policy = shard_layers({ViTMAELayer})
+    backward_prefetch = backward_prefetch()
 
 # ======
 # LOGGER
@@ -195,7 +200,7 @@ transforms = None
 # ===================
 checkpointer = init_checkpointer(
     config.checkpoint.state_dict_type,
-    uses_dist,
+    uses_fsdp,
 )
 from_resume = config.checkpoint.path_chkpt_prev is not None
 
@@ -216,7 +221,7 @@ autocast_context = nullcontext() if device_type == 'cpu' else torch.amp.autocast
 
 # GradScaler
 # If enabled = False scaler is a no-op
-scaler_func = ShardedGradScaler if uses_dist else torch.cuda.amp.GradScaler
+scaler_func = ShardedGradScaler if uses_fsdp else torch.cuda.amp.GradScaler
 scaler = scaler_func(enabled=(config.dist.dtype == 'float16'))
 
 # =====
@@ -229,7 +234,7 @@ ViTMAEPreTrainedModel._init_weights = _init_weights_in_decoder
 hf_model_config = config.model.hf_config
 model_config = ViTMAEConfig(**hf_model_config)
 model = ViTMAEForPreTraining(model_config)
-if not uses_dist: model.to(device)
+if not uses_fsdp: model.to(device)
 logging_model_init(dist_config, model)
 unfreeze_model(model)
 if dist_rank == 0:
@@ -249,18 +254,22 @@ if uses_dist:
     # Convert BatchNorm to SyncBatchNorm
     model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
-    # Wrap it up using FSDP
-    model = FSDP(
-        model,
-        auto_wrap_policy  = auto_wrap_policy,
-        mixed_precision   = mixed_precision,
-        backward_prefetch = backward_prefetch,
-        forward_prefetch  = True,
-        sharding_strategy = sharding_strategy,
-        limit_all_gathers = True,
-        use_orig_params   = False,
-        device_id         = device,
-    )
+    # Wrap it up using FSDP or DDP
+    if uses_dist:
+        if sharding_strategy == ShardingStrategy.NO_SHARD:
+            model = DDP(model, device_ids=[dist_local_rank], output_device=dist_local_rank)
+        else:
+            model = FSDP(
+                model,
+                auto_wrap_policy  = auto_wrap_policy,
+                mixed_precision   = mixed_precision,
+                backward_prefetch = backward_prefetch,
+                forward_prefetch  = True,
+                sharding_strategy = sharding_strategy,
+                limit_all_gathers = True,
+                use_orig_params   = False,
+                device_id         = device,
+            )
 
     sharded_param_count = sum(p.numel() for p in model.parameters())  # .module will return the raw model view when use_orig_params = True
                                                                       # making it effectively reporting the sharded param count.  Removing
@@ -463,7 +472,7 @@ try:
 
                     # Accumulate number of tokens processed
                     total_numel = batch_data.numel()  # Get number of numeric elements
-                    token_size  = model.config.patch_size**2
+                    token_size  = model.module.config.patch_size**2 if uses_dist else model.config.patch_size**2
                     num_tokens  = total_numel / token_size
                     total_num_tokens += num_tokens
 
