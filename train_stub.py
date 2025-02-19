@@ -195,9 +195,9 @@ dataset_eval_val = DistributedSegmentedDummyImageData(dataset_eval_val_config)
 custom_collate = None
 transforms = None
 
-# ===================
-# CHECKPOINT PRE FSDP
-# ===================
+# =================
+# CHECKPOINT PRE DP
+# =================
 checkpointer = init_checkpointer(
     config.checkpoint.state_dict_type,
     uses_fsdp,
@@ -249,7 +249,7 @@ if config.misc.compiles_model:
     logger.debug("Compiling the model...")
     model = torch.compile(model) # requires PyTorch 2.0
 
-# Wrapping the model in FSDP
+# Wrapping the model in FSDP or DDP
 if uses_dist:
     # Convert BatchNorm to SyncBatchNorm
     model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -307,9 +307,9 @@ scheduler = CosineLRScheduler(optimizer         = optimizer,
 # Gradident accumulation
 grad_sync_context = lambda enables_sync: nullcontext() if enables_sync or not uses_dist else model.no_sync()
 
-# ====================
-# CHECKPOINT POST FSDP
-# ====================
+# ==================
+# CHECKPOINT POST DP
+# ==================
 logger.debug(f'[RANK {dist_rank}] Confguring model, optim, scheduler, training state checkpoint...')
 # Set init training state dict
 loss_min = float('inf')
