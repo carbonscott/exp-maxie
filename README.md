@@ -1,6 +1,6 @@
 # Training Stub Documentation
 
-A distributed training implementation supporting DDP, ZeRO-2, and ZeRO-3 optimization strategies.
+A distributed training implementation supporting DDP, ZeRO-2, and ZeRO-3 data parallel strategies.
 
 ## Quick Start
 
