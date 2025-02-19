@@ -76,7 +76,7 @@ from maxie.tensor_transforms import (
 from maxie.utils.fsdp import (
     MemoryMaximizer,
     set_sharding_strategy,
-    fsdp_wrapped_layers,
+    shard_layers,
     backward_prefetch,
     act_chkpt,
 )
@@ -141,7 +141,7 @@ if version.parse(torch_version) <= version.parse("2.0.1"):
 # FSDP SETUP
 # ==========
 sharding_strategy = set_sharding_strategy(config.dist.sharding_stage)
-auto_wrap_policy = fsdp_wrapped_layers({ViTMAELayer})
+auto_wrap_policy = shard_layers({ViTMAELayer})
 backward_prefetch = backward_prefetch()
 
 # ======
@@ -199,6 +199,26 @@ checkpointer = init_checkpointer(
 )
 from_resume = config.checkpoint.path_chkpt_prev is not None
 
+# ===============
+# Mixed precision
+# ===============
+# Mixed precision
+mixed_precision_dtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[config.dist.dtype]
+mixed_precision = MixedPrecision(
+    param_dtype  = mixed_precision_dtype,
+    reduce_dtype = mixed_precision_dtype,
+    buffer_dtype = mixed_precision_dtype,
+)
+
+# Autocast
+device_type = 'cuda' if 'cuda' in device else 'cpu'
+autocast_context = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type = device_type, dtype = mixed_precision_dtype)
+
+# GradScaler
+# If enabled = False scaler is a no-op
+scaler_func = ShardedGradScaler if uses_dist else torch.cuda.amp.GradScaler
+scaler = scaler_func(enabled=(config.dist.dtype == 'float16'))
+
 # =====
 # MODEL
 # =====
@@ -218,23 +238,6 @@ if dist_rank == 0:
 # Model resumption
 if from_resume:
     checkpointer.pre_fsdp_load(dist_rank, model, config.checkpoint.path_chkpt_prev)
-
-# Mixed precision
-mixed_precision_dtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[config.dist.dtype]
-mixed_precision = MixedPrecision(
-    param_dtype  = mixed_precision_dtype,
-    reduce_dtype = mixed_precision_dtype,
-    buffer_dtype = mixed_precision_dtype,
-)
-
-# Autocast
-device_type = 'cuda' if 'cuda' in device else 'cpu'
-autocast_context = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type = device_type, dtype = mixed_precision_dtype)
-
-# GradScaler
-# If enabled = False scaler is a no-op
-scaler_func = ShardedGradScaler if uses_dist else torch.cuda.amp.GradScaler
-scaler = scaler_func(enabled=(config.dist.dtype == 'float16'))
 
 # Compile the model
 if config.misc.compiles_model:
@@ -266,9 +269,6 @@ if uses_dist:
 
     dist.barrier()
 
-# -- Optional grad sync off (to allow grad accumulation)
-grad_sync_context = lambda enables_sync: nullcontext() if enables_sync or not uses_dist else model.no_sync()
-
 # Activation checkpointing
 act_chkpt(model, ViTMAELayer)
 
@@ -277,9 +277,9 @@ act_chkpt(model, ViTMAELayer)
 # ================
 logger.debug(f'[RANK {dist_rank}] Configuring criterion (Skip, it is configured in the model)...')
 
-# =======================
-# OPTIMIZER AND SCHEDULER
-# =======================
+# ================================
+# OPTIMIZER, SCHEDULER, GRAD ACCUM
+# ================================
 logger.debug(f'[RANK {dist_rank}] Configuring optimizer...')
 param_iter = model.parameters()
 optim_arg_dict = dict(
@@ -294,6 +294,9 @@ scheduler = CosineLRScheduler(optimizer         = optimizer,
                               warmup_iterations = config.lr_scheduler.warmup_iterations,
                               total_iterations  = config.lr_scheduler.total_iterations,
                               min_lr            = config.lr_scheduler.min_lr)
+
+# Gradident accumulation
+grad_sync_context = lambda enables_sync: nullcontext() if enables_sync or not uses_dist else model.no_sync()
 
 # ====================
 # CHECKPOINT POST FSDP
