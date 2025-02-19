@@ -775,7 +775,7 @@ try:
                             iter_state["seg"]       = seg
                             iter_state["start_idx"] = dataset_train.start_idx
                             iter_state["end_idx"]   = dataset_train.end_idx
-                            iter_state["loss_min"]  = loss_min
+                            iter_state["loss_min"]  = loss_min.item()
 
                             dir_chkpt = f"{timestamp}.epoch_{epoch}.end_idx_{dataset_train.end_idx}"
                             if config.checkpoint.prefix is not None: dir_chkpt = f"{config.checkpoint.prefix}.{dir_chkpt}"
@@ -798,7 +798,7 @@ try:
                         iter_state["seg"]       = seg
                         iter_state["start_idx"] = dataset_train.start_idx
                         iter_state["end_idx"]   = dataset_train.end_idx
-                        iter_state["loss_min"]  = loss_min
+                        iter_state["loss_min"]  = loss_min.item()
 
                         dir_chkpt = f"{timestamp}.preempt"
                         if config.checkpoint.prefix is not None: dir_chkpt = f"{config.checkpoint.prefix}.{dir_chkpt}"
