@@ -2,21 +2,64 @@
 
 A distributed training implementation supporting DDP, ZeRO-2, and ZeRO-3 data parallel strategies.
 
+## Dependencies
+
+(**Install PyTorch**):
+- Fresh install on S3DF
+- Follow [this link](https://docs.olcf.ornl.gov/software/analytics/pytorch_frontier.html#installing-pytorch) to install it on Frontier
+
+[**Install maxie**](https://github.com/carbonscott/maxie#pip)
+
+```bash
+pip install transformers
+pip install omegaconf colorama
+```
+
 ## Quick Start
+
+> **Required if running on Frontier**
+>
+> Before running the code, execute these commands to set up the MIOpen cache:
+> ```bash
+> export MIOPEN_USER_DB_PATH="/tmp/$(openssl rand -base64 12 | head -c 16)-miopen-cache"
+> export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_USER_DB_PATH}
+> rm -rf ${MIOPEN_USER_DB_PATH}
+> mkdir -p ${MIOPEN_USER_DB_PATH}
+> ```
+>
+> If you need to install AWS-OFI-RCCL Plugin, please refer to this [link](https://docs.olcf.ornl.gov/software/analytics/pytorch_frontier.html#aws-ofi-rccl-plugin).
+> You have to run
+> ```bash
+> export LD_LIBRARY_PATH=${PATH TO THE PLUGIN}/lib/:${LD_LIBRARY_PATH}
+> ```
+> The installation guide will show you the exact `export LD_LIBRARY_PATH=...`
+> that you can cut, paste and run.  For example, mine looks like 
+> ```bash
+> export LD_LIBRARY_PATH=/lustre/orion/mph121/proj-shared/cwang31/packages/aws-ofi-rccl/lib:$LD_LIBRARY_PATH
+> ```
 
 ### Single Process
 ```bash
+# S3DF/ada
 python train_stub.py test_config_training.yaml
+
+# Frontier
+NCCL_NET_GDR_LEVEL=3 NCCL_ALGO="TREE or RING" NCCL_CROSS_NIC=1 OMP_NUM_THREADS=1 NCCL_SOCKET_IFNAME=hsn0 MASTER_PORT=3442 TRANSFORMERS_CACHE=.cache/huggingface/hub/ MASTER_ADDR=$(hostname -i) python train_stub.py test_config_training.yaml
 ```
 
 ### Distributed Training
 SLURM:
 ```bash
+# 1 node, 10 GPUs per node (S3DF/ada)
 MASTER_ADDR=$(hostname) srun --mpi=none --nodes 1 --ntasks-per-node 10 --gpus-per-node 10 bash -c "python train_stub.py test_config_training.yaml"
+
+# 2 nodes, 8 GPUs per node (Frontier)
+NCCL_NET_GDR_LEVEL=3 NCCL_ALGO="TREE or RING" NCCL_CROSS_NIC=1 OMP_NUM_THREADS=1 NCCL_SOCKET_IFNAME=hsn0 MASTER_PORT=3442 TRANSFORMERS_CACHE=.cache/huggingface/hub/ MASTER_ADDR=$(hostname -i) srun --gres=gpu:8  --gpu-bind=closest --nodes 2 --ntasks-per-node 8 --gpus-per-node 8 bash -c "python train_stub.py test_config_training.yaml"
 ```
 
 MPI:
 ```bash
+# S3DF/ada
 mpirun -n 10 python train_stub.py test_config_training.yaml
 ```
 
@@ -31,12 +74,14 @@ dist:
   backend: nccl
   dtype: bfloat16
   sharding_stage: zero3  # Options: zero0 (DDP), zero2 (SHARD_GRAD_OP), zero3 (FULL_SHARD)
+                         #                       zero2_hybrid,          zero3_hybrid
+                         # Hybrid means DDP across nodes and FSDP within a node
 ```
 
 #### Dataset Configuration
 ```yaml
 dataset:
-  batch_size: 32
+  batch_size: 256
   num_workers: 1
   path_train: experiments/datasets/safetensor_dataset.train.csv
   path_eval: experiments/datasets/safetensor_dataset.validate.csv
@@ -93,12 +138,3 @@ checkpoint:
   directory: experiments/chkpts
   prefix: dummy-0.1
 ```
-
-## Distributed Training Details
-
-The training supports three distributed strategies:
-- `zero0`: Traditional DistributedDataParallel (DDP)
-- `zero2`: Gradient & optimizer state sharding
-- `zero3`: Full model, gradient, and optimizer state sharding
-
-Select the strategy via `dist.sharding_stage` in the config file.
