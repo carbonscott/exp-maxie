@@ -4,7 +4,7 @@ A distributed training implementation supporting DDP, ZeRO-2, and ZeRO-3 data pa
 
 ## Dependencies
 
-(**Install PyTorch**):
+**Install PyTorch**:
 - Fresh install on S3DF
 - Follow [this link](https://docs.olcf.ornl.gov/software/analytics/pytorch_frontier.html#installing-pytorch) to install it on Frontier
 
