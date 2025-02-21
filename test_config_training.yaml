@@ -8,7 +8,7 @@ checkpoint:
   path_chkpt_prev: null
   pretrain: null
 dataset:
-  batch_size: 32
+  batch_size: 256
   cache_size: 0
   debug: false
   drop_last_in_loader: true
@@ -17,14 +17,16 @@ dataset:
   path_train: experiments/datasets/safetensor_dataset.train.csv
   path_eval: experiments/datasets/safetensor_dataset.validate.csv
   pin_memory: true
-  prefetch_factor: 16
-  seg_size: 240
+  prefetch_factor: 2
+  seg_size: 2560
+  ## seg_size: 100
   num_channels: 1
   input:
     C: 1
     H: 1920
     W: 1920
-    total_size: 3000
+    total_size: 256000
+    ## total_size: 100
   transforms:
     H_pad: 1920
     Hv: 256
@@ -47,11 +49,11 @@ dataset:
     size_patch: 20
     var_size_patch: 0.2
 dist:
-  cpu_only: False
+  cpu_only: false
   backend: nccl
   uses_unique_world_seed: true
   dtype: bfloat16
-  sharding_stage: zero3
+  sharding_stage: zero3_hybrid
 logging:
   directory: experiments/logs
   prefix: dummy-5.0
@@ -67,7 +69,7 @@ misc:
   max_epochs: 5
   max_eval_iter: 10
   max_eval_retry: 2
-  compiles_model: false
+  compiles_model: true
   data_dump_on: false
   peak_flops_per_sec: 312000000000000
   monitors_dynamics: false
@@ -91,7 +93,7 @@ model:
     decoder_num_hidden_layers: 16
     decoder_intermediate_size: 2048
     mask_ratio: 0.75
-    norm_pix_loss: false
+    norm_pix_loss: true
   from_scratch: false
 optim:
   grad_clip: 1.0
