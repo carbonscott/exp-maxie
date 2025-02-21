@@ -247,7 +247,7 @@ if from_resume:
 # Compile the model
 if config.misc.compiles_model:
     logger.debug("Compiling the model...")
-    model = torch.compile(model) # requires PyTorch 2.0
+    model = torch.compile(model, mode="reduce-overhead") # requires PyTorch 2.0
 
 # Wrapping the model in FSDP or DDP
 if uses_dist:
@@ -267,7 +267,7 @@ if uses_dist:
                 forward_prefetch  = True,
                 sharding_strategy = sharding_strategy,
                 limit_all_gathers = True,
-                use_orig_params   = False,
+                use_orig_params   = config.misc.compiles_model,
                 device_id         = device,
             )
 
