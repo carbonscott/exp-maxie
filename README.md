@@ -63,6 +63,8 @@ MPI:
 mpirun -n 10 python train_stub.py test_config_training.yaml
 ```
 
+![figures/multi_node.png]
+
 ## Configuration
 
 ### Key Sections
