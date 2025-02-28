@@ -1,0 +1,39 @@
+dist:
+  # Distributed training configuration
+  cpu_only: false
+  backend: "gloo"  # Use "gloo" for CPU-only
+  uses_unique_world_seed: true
+
+
+dataset:
+  # Streaming configuration
+  streaming_addresses:
+    - "tcp://127.0.0.1:5555"
+    - "tcp://127.0.0.1:5556"
+    - "tcp://127.0.0.1:5557"
+  pushers_per_node: 3
+  queue_size: 1280
+  timeout_ms: 1000  # Socket timeout in milliseconds
+  max_wait_time: 60  # Maximum time to wait for data before error
+
+  # Number of batches to test
+  num_batches: 10000
+
+  # Basic dataset parameters
+  input:
+    C: 1
+    H: 1920
+    W: 1920
+
+  # DataLoader parameters
+  batch_size: 16
+  num_workers: 2
+  pin_memory: true
+  prefetch_factor: 2
+
+  # Checkpoint
+  save_checkpoint: false
+
+logging:
+  directory: "logs"
+  level: "INFO"
