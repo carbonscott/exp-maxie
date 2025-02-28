@@ -1,0 +1,1 @@
+NCCL_NET_GDR_LEVEL=3 NCCL_ALGO="TREE or RING" NCCL_CROSS_NIC=1 OMP_NUM_THREADS=1 NCCL_SOCKET_IFNAME=hsn0 MASTER_PORT=3442 TRANSFORMERS_CACHE=.cache/huggingface/hub/ MASTER_ADDR=$(hostname -i) torchrun --nnodes=1 --nproc_per_node=8 --rdzv_id=job_id --rdzv_backend=c10d --rdzv_endpoint=$(hostname -i):3442 test_streaming_dataset_stub.py test_streaming_dataset_stub.yaml
