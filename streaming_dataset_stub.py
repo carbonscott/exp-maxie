@@ -24,8 +24,7 @@ class StreamingDataConfig:
     C: int                     # Number of channels
     H: int                     # Height of tensor
     W: int                     # Width of tensor
-    addresses: List[str]       # All available addresses (from YAML)
-    pushers_per_node: int = 2  # Number of pushers to use per node
+    address: str               # Address to pull data from
     queue_size: int = 128      # Size of shared queue
     timeout_ms: int = 1000     # Socket timeout in milliseconds
     max_wait_time: int = 60    # Max time to wait if queue is empty (seconds)
@@ -42,10 +41,11 @@ class StreamingDataConfig:
 
 class StreamingDataset(IterableDataset):
     """
-    Features
-    - Has one socket connection per node (not per rank)
-    - Tracks global indices for simple checkpointing/resumption
-    - Works with distributed training across multiple nodes
+    An optimized streaming dataset for multi-node training that:
+    1. Has one socket connection per node (not per rank)
+    2. Waits instead of generating random tensors if data isn't available
+    3. Tracks global indices for simple checkpointing/resumption
+    4. Works with distributed training across multiple nodes
     """
 
     def __init__(self, config):
@@ -79,9 +79,6 @@ class StreamingDataset(IterableDataset):
             'latest_index': mp.Value('i', -1),
         }
 
-        # Select addresses for this specific node
-        self.node_addresses = self._select_addresses_for_node()
-
         # Start puller thread for all ranks
         # Each rank will have its own connection
         self._start_puller_thread()
@@ -92,36 +89,16 @@ class StreamingDataset(IterableDataset):
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-    def _select_addresses_for_node(self):
-        """Select which addresses this node will use based on node_id"""
-        total_addresses = len(self.config.addresses)
-
-        # Determine starting index for this node's addresses
-        start_idx = (self.node_id * self.config.pushers_per_node) % total_addresses
-
-        # Collect addresses for this node
-        node_addresses = []
-        for i in range(self.config.pushers_per_node):
-            address_idx = (start_idx + i) % total_addresses
-            node_addresses.append(self.config.addresses[address_idx])
-
-        logger.info(f"[NODE {self.node_id}] Using addresses: {node_addresses}")
-        return node_addresses
-
     def _start_puller_thread(self):
         """Start the puller thread if it's not already running"""
-        # Assign rank to a specific address from node's addresses
-        address_idx = self.local_rank % len(self.node_addresses)
-        address = self.node_addresses[address_idx]
-
         # Log that we're starting a thread
-        logger.info(f"[RANK {self.rank}] Starting puller thread for {address}")
+        logger.info(f"[RANK {self.rank}] Starting puller thread for {self.config.address}")
 
         # Create and start the thread
         self.puller_thread = threading.Thread(
             target=self._pull_data_thread,
             args=(
-                address,
+                self.config.address,
                 self.config.timeout_ms,
                 self.node_id,
                 self.rank,
@@ -192,7 +169,7 @@ class StreamingDataset(IterableDataset):
                             if metadata and 'index' in metadata:
                                 with self.stats["latest_index"].get_lock():
                                     self.stats["latest_index"].value = max(
-                                        self.stats["latest_index"].value,
+                                        self.stats["latest_index"].value, 
                                         metadata['index']
                                     )
 
