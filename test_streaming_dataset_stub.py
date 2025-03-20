@@ -39,8 +39,8 @@ from maxie.utils.dist import dist_setup
 from maxie.utils.seed import set_seed
 from maxie.utils.logger import init_logger
 
-# Get the logger
-logger = logging.getLogger(__name__)
+## # Get the logger
+## logger = logging.getLogger(__name__)
 
 # ======================
 # COMMAND LINE INTERFACE
@@ -73,7 +73,7 @@ device = dist_config.device
 # ======
 # LOGGER
 # ======
-timestamp = init_logger(
+timestamp, logger = init_logger(
     uses_dist,
     dist_rank,
     device,
@@ -95,9 +95,9 @@ set_seed(world_seed)
 # DATASET
 # =======
 # Determine node ID and local rank for dataset configuration
-node_id = dist_rank // torch.cuda.device_count() if torch.cuda.is_available() else 0
-num_nodes = (dist_world_size + torch.cuda.device_count() - 1) // torch.cuda.device_count() if torch.cuda.is_available() else 1
-
+gpus_per_node = config.dist.gpus_per_node if hasattr(config.dist, 'gpus_per_node') else torch.cuda.device_count()
+node_id = dist_rank // gpus_per_node if torch.cuda.is_available() else 0
+num_nodes = (dist_world_size + gpus_per_node - 1) // gpus_per_node if torch.cuda.is_available() else 1
 logger.info(f"Rank {dist_rank}, Local Rank {dist_local_rank}, Node ID {node_id}")
 
 # Create streaming dataset config
@@ -105,8 +105,8 @@ dataset_config = StreamingDataConfig(
     C=config.dataset.input.C,
     H=config.dataset.input.H,
     W=config.dataset.input.W,
-    addresses=config.dataset.streaming_addresses,
-    pushers_per_node=config.dataset.pushers_per_node,
+    addresses=config.dataset.streaming_addresses if hasattr(config.dataset, 'streaming_addresses') else [config.dataset.streaming_address],
+    address_assignment=config.dataset.address_assignment if hasattr(config.dataset, 'address_assignment') else "round-robin",
     queue_size=config.dataset.queue_size if hasattr(config.dataset, 'queue_size') else 128,
     timeout_ms=config.dataset.timeout_ms if hasattr(config.dataset, 'timeout_ms') else 1000,
     max_wait_time=config.dataset.max_wait_time if hasattr(config.dataset, 'max_wait_time') else 60,
@@ -119,8 +119,8 @@ dataset_config = StreamingDataConfig(
 )
 
 # Create the dataset
-logger.info(f"[RANK {dist_rank}] Creating streaming dataset from {config.dataset.streaming_addresses}")
 dataset = StreamingDataset(dataset_config)
+logger.info(f"[RANK {dist_rank}] Creating streaming dataset from {dataset.node_address}")
 
 # Create the dataloader (adapting from train.py's wrap_with_torch_dataloader)
 batch_size = config.dataset.batch_size
