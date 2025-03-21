@@ -34,7 +34,7 @@ import torch.distributed as dist
 # Dataset imports
 # =====
 # Import the streaming dataset
-from streaming_dataset_stub import StreamingDataset, StreamingDataConfig
+from maxie.datasets.streaming_dataset import StreamingDataset, StreamingDataConfig
 from maxie.utils.dist import dist_setup
 from maxie.utils.seed import set_seed
 from maxie.utils.logger import init_logger
@@ -62,6 +62,7 @@ with open(fl_yaml, 'r') as fh:
 # ====
 dist_config = dist_setup(
     config.dist.cpu_only,
+    config.dist.device_per_node,
     config.dist.backend,
 )
 uses_dist = dist_config.uses_dist
@@ -95,9 +96,9 @@ set_seed(world_seed)
 # DATASET
 # =======
 # Determine node ID and local rank for dataset configuration
-gpus_per_node = config.dist.gpus_per_node if hasattr(config.dist, 'gpus_per_node') else torch.cuda.device_count()
-node_id = dist_rank // gpus_per_node if torch.cuda.is_available() else 0
-num_nodes = (dist_world_size + gpus_per_node - 1) // gpus_per_node if torch.cuda.is_available() else 1
+device_per_node = config.dist.device_per_node if hasattr(config.dist, 'device_per_node') else torch.cuda.device_count()
+node_id = dist_rank // device_per_node if torch.cuda.is_available() else 0
+num_nodes = (dist_world_size + device_per_node - 1) // device_per_node if torch.cuda.is_available() else 1
 logger.info(f"Rank {dist_rank}, Local Rank {dist_local_rank}, Node ID {node_id}")
 
 # Create streaming dataset config
