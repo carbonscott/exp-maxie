@@ -2,6 +2,7 @@ dist:
   # Distributed training configuration
   cpu_only: false
   backend: "gloo"  # Use "gloo" for CPU-only
+  ## backend: "nccl"  # Use "gloo" for CPU-only
   uses_unique_world_seed: true
   device_per_node: 10
 
@@ -9,12 +10,20 @@ dist:
 dataset:
   # Streaming configuration
   streaming_addresses:
-  - "tcp://172.24.49.11:5555"
-  - "tcp://172.24.49.12:5555"
-  - "tcp://172.24.49.13:5555"
-  - "tcp://172.24.49.14:5555"
+  # - "tcp://172.24.49.11:5555"
+  # - "tcp://172.24.49.12:5555"
+  # - "tcp://172.24.49.13:5555"
+  # - "tcp://172.24.49.14:5555"
+  - "tcp://172.24.50.28:5555"
+  - "tcp://172.24.50.28:5556"
+  - "tcp://172.24.50.28:5557"
+  - "tcp://172.24.50.28:5558"
+  - "tcp://172.24.50.28:5559"
+  - "tcp://172.24.50.28:5560"
+  - "tcp://172.24.50.28:5561"
+  - "tcp://172.24.50.28:5562"
   address_assignment: "round-robin"
-  sockets_per_node: 2  # Number of socket connections per node
+  sockets_per_node: 16  # Number of socket connections per node
   # address_assignment: "explicit"
   node_address_map: null  # Optional: explicit node to address mapping
   # node_address_map:
@@ -30,7 +39,7 @@ dataset:
   connect_timeout: 10  # Seconds to wait for initial connections
 
   # Number of batches to test
-  num_batches: 10000
+  num_batches: 100
 
   # Basic dataset parameters
   input:
@@ -40,12 +49,12 @@ dataset:
 
   # DataLoader parameters
   batch_size: 16
-  num_workers: 1
+  num_workers: 2
   pin_memory: true
   prefetch_factor: 2
 
   # Checkpoint
-  save_checkpoint: false
+  save_checkpoint: true
 
 logging:
   directory: "experiments/logs"

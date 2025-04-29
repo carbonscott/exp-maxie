@@ -149,6 +149,8 @@ try:
     logger.info(f"[RANK {dist_rank}] Starting test loop for {config.dataset.num_batches} batches")
     start_time = time.time()
     total_samples = 0
+    total_data_size_bytes = 0
+    total_data_size_gb = 0
 
     with tqdm.tqdm(
         total=config.dataset.num_batches,
@@ -159,17 +161,25 @@ try:
             # Move batch to device
             batch_data = batch_data.to(device, non_blocking=True)
 
+            # Calculate batch data size
+            batch_data_size_bytes = batch_data.nbytes
+            batch_data_size_gb = batch_data_size_bytes / (1024**3)  # Convert to GB
+
             # Update stats
             batch_size = batch_data.size(0)
             total_samples += batch_size
+            total_data_size_bytes += batch_data_size_bytes
+            total_data_size_gb += batch_data_size_gb
 
             # Log progress
             if batch_idx % 10 == 0:
                 elapsed = time.time() - start_time
                 samples_per_sec = total_samples / elapsed if elapsed > 0 else 0
+                gb_per_sec = total_data_size_gb / elapsed if elapsed > 0 else 0
                 logger.info(f"[RANK {dist_rank}] Batch {batch_idx}: "
                            f"shape={batch_data.shape}, "
-                           f"samples/sec={samples_per_sec:.1f}")
+                           f"samples/sec={samples_per_sec:.1f}, "
+                           f"throughput={gb_per_sec:.3f} GB/s")
 
             # Update progress bar
             pbar.update(1)
@@ -186,9 +196,11 @@ try:
     # Final stats
     elapsed = time.time() - start_time
     samples_per_sec = total_samples / elapsed if elapsed > 0 else 0
+    gb_per_sec = total_data_size_gb / elapsed if elapsed > 0 else 0
 
     logger.info(f"[RANK {dist_rank}] Test completed: processed {total_samples} samples "
-               f"in {elapsed:.2f}s ({samples_per_sec:.1f} samples/sec)")
+               f"({total_data_size_gb:.2f} GB) in {elapsed:.2f}s, "
+               f"{samples_per_sec:.1f} samples/sec, {gb_per_sec:.3f} GB/s")
 
     # Save checkpoint info if requested
     if config.dataset.save_checkpoint:
