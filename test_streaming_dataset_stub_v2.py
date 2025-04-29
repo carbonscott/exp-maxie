@@ -37,10 +37,22 @@ import torch.distributed as dist
 from maxie.datasets.streaming_dataset import StreamingDataset, StreamingDataConfig
 from maxie.utils.dist import dist_setup
 from maxie.utils.seed import set_seed
-from maxie.utils.logger import init_logger
+from maxie.utils.logger import init_timestamp
 
-## # Get the logger
-## logger = logging.getLogger(__name__)
+# Get the logger
+logger = logging.getLogger('main')
+formatter = logging.Formatter(
+    fmt="%(asctime)s %(levelname)s %(name)s\n%(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S"
+)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+# )
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 # ======================
 # COMMAND LINE INTERFACE
@@ -54,6 +66,7 @@ args = parser.parse_args()
 # =============
 # Load CONFIG from YAML
 fl_yaml = args.yaml_file
+basename_yaml = os.path.basename(fl_yaml)
 with open(fl_yaml, 'r') as fh:
     config = OmegaConf.create(yaml.safe_load(fh))
 
@@ -74,14 +87,10 @@ device = dist_config.device
 # ======
 # LOGGER
 # ======
-timestamp, logger = init_logger(
+timestamp = init_timestamp(
     uses_dist,
     dist_rank,
     device,
-    "test_streaming",
-    config.logging.directory,
-    config.logging.level,
-    'console',
 )
 
 # =======
@@ -222,7 +231,7 @@ try:
         # Save checkpoint info to file
         if dist_rank == 0:
             os.makedirs("checkpoints", exist_ok=True)
-            checkpoint_file = f"checkpoints/dataset_checkpoint_{timestamp}.json"
+            checkpoint_file = f"checkpoints/{basename_yaml}_{timestamp}.json"
             with open(checkpoint_file, 'w') as f:
                 json.dump(checkpoint_info, f, indent=2)
             logger.info(f"Saved checkpoint info to {checkpoint_file}")
