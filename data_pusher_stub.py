@@ -5,6 +5,7 @@ import io
 import numpy as np
 from pynng import Push0
 import threading
+import multiprocessing as mp
 
 def tensor_to_bytes(tensor):
     """Convert a PyTorch tensor to bytes for transmission."""
@@ -21,7 +22,8 @@ def dummy_data_pusher_thread(
     total_size=10000,
     push_interval=0.001,
     continuous=False,
-    stream_id=0
+    stream_id=0,
+    shared_counter=None,
 ):
     """
     Push random tensors to the specified address.
@@ -46,8 +48,15 @@ def dummy_data_pusher_thread(
             for i in range(total_size):
                 # In continuous mode, use a counter to ensure unique indices
                 if continuous:
-                    global_idx = counter
-                    counter += 1
+                    if shared_counter is not None:
+                        # Atomically get and increment the shared counter
+                        with shared_counter.get_lock():
+                            global_idx = shared_counter.value
+                            shared_counter.value += 1
+                    else:
+                        # Fallback to local counter for backward compatibility
+                        global_idx = counter
+                        counter += 1
                 else:
                     global_idx = i
 
@@ -107,6 +116,9 @@ def dummy_data_pusher(
     """
     threads = []
 
+    # Create a shared counter for continuous mode
+    shared_counter = mp.Value('i', 0) if continuous else None
+
     for i in range(num_streams):
         # Create address for this stream
         if num_streams > 1:
@@ -138,7 +150,8 @@ def dummy_data_pusher(
                 total_size,
                 push_interval,
                 continuous,
-                i
+                i,
+                shared_counter,
             )
         )
         thread.daemon = True
