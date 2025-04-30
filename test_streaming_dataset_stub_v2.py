@@ -128,6 +128,7 @@ dataset_config = StreamingDataConfig(
     local_rank=dist_local_rank,
     node_id=node_id,
     num_nodes=num_nodes,
+    num_workers=config.dataset.num_workers,
     lock_dir=os.getcwd(),
 )
 
