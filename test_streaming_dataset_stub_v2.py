@@ -186,9 +186,9 @@ try:
                 elapsed = time.time() - start_time
                 samples_per_sec = total_samples / elapsed if elapsed > 0 else 0
                 gb_per_sec = total_data_size_gb / elapsed if elapsed > 0 else 0
-                logger.info(f"[RANK {dist_rank}] Batch {batch_idx}: "
-                           f"shape={batch_data.shape}, "
-                           f"samples/sec={samples_per_sec:.1f}, "
+                logger.info(f"[RANK {dist_rank}] Progress: Batch {batch_idx} | "
+                           f"shape={batch_data.shape} | "
+                           f"samples/sec={samples_per_sec:.1f} | "
                            f"throughput={gb_per_sec:.3f} GB/s")
 
             # Update progress bar
