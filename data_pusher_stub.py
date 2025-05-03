@@ -5,14 +5,20 @@ import io
 import numpy as np
 from pynng import Push0
 import threading
-import multiprocessing as mp
 
 def tensor_to_bytes(tensor):
-    """Convert a PyTorch tensor to bytes for transmission."""
-    buffer = io.BytesIO()
-    tensor_np = tensor.cpu().numpy()
-    np.save(buffer, tensor_np)
-    return buffer.getvalue()
+    """Convert a PyTorch tensor to bytes for transmission.
+
+    This version skips numpy.save() and directly gets raw bytes.
+    """
+    # Ensure tensor is on CPU and in the right format
+    tensor_cpu = tensor.cpu()
+    tensor_np = tensor_cpu.numpy()
+
+    # Get raw bytes (more efficient than numpy.save)
+    tensor_bytes = tensor_np.tobytes()
+
+    return tensor_bytes
 
 def dummy_data_pusher_thread(
     address,
@@ -22,8 +28,7 @@ def dummy_data_pusher_thread(
     total_size=10000,
     push_interval=0.001,
     continuous=False,
-    stream_id=0,
-    shared_counter=None,
+    stream_id=0
 ):
     """
     Push random tensors to the specified address.
@@ -48,25 +53,18 @@ def dummy_data_pusher_thread(
             for i in range(total_size):
                 # In continuous mode, use a counter to ensure unique indices
                 if continuous:
-                    if shared_counter is not None:
-                        # Atomically get and increment the shared counter
-                        with shared_counter.get_lock():
-                            global_idx = shared_counter.value
-                            shared_counter.value += 1
-                    else:
-                        # Fallback to local counter for backward compatibility
-                        global_idx = counter
-                        counter += 1
+                    global_idx = counter
+                    counter += 1
                 else:
                     global_idx = i
 
                 # Generate a random tensor
                 tensor = torch.randn(C, H, W)
 
-                # Convert tensor to bytes
+                # Convert tensor to bytes (directly, without numpy.save)
                 data = tensor_to_bytes(tensor)
 
-                # Prepare metadata
+                # Prepare metadata (include shape information for tensor reconstruction)
                 metadata = {
                     'index': global_idx,
                     'shape': (C, H, W),
@@ -78,8 +76,8 @@ def dummy_data_pusher_thread(
                 # Push metadata header and data payload
                 sock.send(metadata_bytes + b'\n' + data)
 
-                ## # Wait for the specified interval
-                ## time.sleep(push_interval)
+                # Wait for the specified interval
+                time.sleep(push_interval)
 
                 if (i + 1) % 1000 == 0:
                     print(f"Stream {stream_id}: Pushed {i + 1} samples in current cycle")
@@ -116,9 +114,6 @@ def dummy_data_pusher(
     """
     threads = []
 
-    # Create a shared counter for continuous mode
-    shared_counter = mp.Value('i', 0) if continuous else None
-
     for i in range(num_streams):
         # Create address for this stream
         if num_streams > 1:
@@ -150,8 +145,7 @@ def dummy_data_pusher(
                 total_size,
                 push_interval,
                 continuous,
-                i,
-                shared_counter,
+                i
             )
         )
         thread.daemon = True
