@@ -77,7 +77,7 @@ def dummy_data_pusher_thread(
                 sock.send(metadata_bytes + b'\n' + data)
 
                 # Wait for the specified interval
-                time.sleep(push_interval)
+                if push_inverval > 0: time.sleep(push_interval)
 
                 if (i + 1) % 1000 == 0:
                     print(f"Stream {stream_id}: Pushed {i + 1} samples in current cycle")
